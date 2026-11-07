@@ -7,6 +7,7 @@ import (
 	"github.com/marconi-prog/nexusflow/internal/application/ports"
 	"github.com/marconi-prog/nexusflow/internal/application/services"
 	"github.com/marconi-prog/nexusflow/internal/config"
+	"github.com/marconi-prog/nexusflow/internal/infrastructure/integrations/hotglue"
 )
 
 // Deps são as dependências injetadas nos handlers.
@@ -20,7 +21,9 @@ type Deps struct {
 	Tasks      *services.Tasks
 	Monitoring *services.Monitoring
 	Hub        *Hub
-	Version    string
+	// HotglueWebhook recebe os webhooks do Hotglue (autenticados por HMAC, não por API key).
+	HotglueWebhook *hotglue.WebhookHandler
+	Version        string
 }
 
 type Handlers struct{ Deps }

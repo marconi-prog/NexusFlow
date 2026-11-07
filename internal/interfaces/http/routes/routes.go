@@ -35,6 +35,11 @@ func New(d handlers.Deps) *gin.Engine {
 	r.GET("/health/ready", h.Ready)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
+	// webhooks externos: fora do /api/v1 porque se autenticam por assinatura, não por API key
+	if d.HotglueWebhook != nil {
+		r.POST("/webhooks/hotglue", d.HotglueWebhook.Handle)
+	}
+
 	v1 := r.Group("/api/v1", middleware.Authenticate(d.Config.Auth.APIKeys))
 	viewer := v1.Group("", middleware.Require(auth.RoleViewer))
 	operator := v1.Group("", middleware.Require(auth.RoleOperator))

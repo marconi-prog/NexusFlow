@@ -19,6 +19,7 @@ import (
 	"github.com/marconi-prog/nexusflow/internal/application/services"
 	"github.com/marconi-prog/nexusflow/internal/config"
 	"github.com/marconi-prog/nexusflow/internal/domain/payment"
+	"github.com/marconi-prog/nexusflow/internal/infrastructure/integrations/hotglue"
 	"github.com/marconi-prog/nexusflow/internal/infrastructure/observability"
 	"github.com/marconi-prog/nexusflow/internal/worker"
 	"github.com/marconi-prog/nexusflow/internal/worker/handlers"
@@ -76,6 +77,17 @@ func run() error {
 		services.NewProcesses(eng, db.Store, rec, logger), logger)
 	for _, spec := range handlers.Saga(orders) {
 		w.Register(spec)
+	}
+
+	// Integração Hotglue (processes/bpmn/sincronizacao-hotglue.bpmn): só com HOTGLUE_* configurado
+	if hgCfg := hotglue.LoadConfig(); hgCfg.Enabled() {
+		hg, err := hotglue.NewClient(hgCfg)
+		if err != nil {
+			return err
+		}
+		w.Register(handlers.HotglueRunJob(hg))
+	} else {
+		logger.Info("HOTGLUE_API_KEY/HOTGLUE_ENV_ID ausentes: worker hotglue.run-job desabilitado")
 	}
 
 	if err := w.Only(cfg.Worker.JobTypes); err != nil {

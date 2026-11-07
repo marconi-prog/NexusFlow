@@ -16,6 +16,7 @@ import (
 	"github.com/marconi-prog/nexusflow/internal/application/services"
 	"github.com/marconi-prog/nexusflow/internal/config"
 	"github.com/marconi-prog/nexusflow/internal/domain/payment"
+	"github.com/marconi-prog/nexusflow/internal/infrastructure/integrations/hotglue"
 	"github.com/marconi-prog/nexusflow/internal/infrastructure/observability"
 	"github.com/marconi-prog/nexusflow/internal/interfaces/http/handlers"
 	"github.com/marconi-prog/nexusflow/internal/interfaces/http/routes"
@@ -60,11 +61,13 @@ func run() error {
 	orders := services.NewOrders(db.Orders, db.Inventory, db.Payments, payment.NewSimulatedGateway(), procs, logger)
 
 	router := routes.New(handlers.Deps{
-		Config:     cfg,
-		Logger:     logger,
-		Store:      st,
-		Processes:  procs,
-		Orders:     orders,
+		Config:    cfg,
+		Logger:    logger,
+		Store:     st,
+		Processes: procs,
+		Orders:    orders,
+		HotglueWebhook: hotglue.NewWebhookHandler(hotglue.LoadConfig().WebhookSecret, procs,
+			logger.With("component", "hotglue")),
 		Incidents:  services.NewIncidents(eng, rec, logger),
 		Tasks:      services.NewTasks(eng, rec),
 		Monitoring: mon,

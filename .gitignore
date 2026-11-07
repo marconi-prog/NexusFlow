@@ -1,0 +1,98 @@
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Go
+/bin/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+vendor/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+
+# Docker
+.docker/
+docker-data/
+volumes/
+
+# Camunda local runtime
+camunda-data/
+zeebe-data/
+elasticsearch-data/
+operate-data/
+tasklist-data/
+identity-data/
+
+# Infrastructure state
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# IDEs and editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+*.swp
+*.swo
+*~
+
+# Fedora / Linux
+.Trash-*
+.directory
+.nfs*
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+tmp/
+temp/
+.cache/
+*.tmp
+*.bak
+*.orig
+
+# Test artifacts
+test-results/
+playwright-report/
+.nyc_output/

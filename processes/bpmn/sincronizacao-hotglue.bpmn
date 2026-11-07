@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_SincronizacaoHotglue"
+                  targetNamespace="http://nexusflow/bpmn"
+                  exporter="NexusFlow"
+                  modeler:executionPlatform="Camunda Cloud"
+                  modeler:executionPlatformVersion="8.8.0">
+
+  <bpmn:message id="Message_JobFinalizado" name="hotglue-job-finalizado">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=hotglueJobId" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+
+  <bpmn:process id="sincronizacao-hotglue" name="Sincronização Hotglue" isExecutable="true">
+    <bpmn:startEvent id="Start_Sincronizar" name="Sincronização solicitada">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <!-- dispara o job no Hotglue; devolve hotglueJobId (variável de entrada: tenant) -->
+    <bpmn:serviceTask id="Task_DispararJob" name="Disparar job no Hotglue">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="hotglue.run-job" retries="5" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="retryBackoff" value="1m" />
+        </zeebe:taskHeaders>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- espera o webhook do Hotglue (POST /webhooks/hotglue publica a mensagem) -->
+    <bpmn:receiveTask id="Task_AguardarJob" name="Aguardar fim do job" messageRef="Message_JobFinalizado">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:boundaryEvent id="Boundary_Timeout" name="2 horas sem resposta" attachedToRef="Task_AguardarJob">
+      <bpmn:outgoing>Flow_Timeout</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDef_Timeout">
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT2H</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+
+    <bpmn:exclusiveGateway id="Gateway_Sucesso" name="Job concluído?" default="Flow_Falhou">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_Ok</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Falhou</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_Sincronizado" name="Dados sincronizados">
+      <bpmn:incoming>Flow_Ok</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- falha ou timeout: alguém do time de integrações analisa -->
+    <bpmn:exclusiveGateway id="Gateway_Analisar">
+      <bpmn:incoming>Flow_Falhou</bpmn:incoming>
+      <bpmn:incoming>Flow_Timeout</bpmn:incoming>
+      <bpmn:outgoing>Flow_4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_AnalisarFalha" name="Analisar falha da sincronização">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:assignmentDefinition candidateGroups="integracoes" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_Falhou" name="Sincronização falhou">
+      <bpmn:incoming>Flow_5</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_Sincronizar" targetRef="Task_DispararJob" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_DispararJob" targetRef="Task_AguardarJob" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_AguardarJob" targetRef="Gateway_Sucesso" />
+    <bpmn:sequenceFlow id="Flow_Ok" name="sim" sourceRef="Gateway_Sucesso" targetRef="End_Sincronizado">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=hotglueSucesso = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Falhou" name="não" sourceRef="Gateway_Sucesso" targetRef="Gateway_Analisar" />
+    <bpmn:sequenceFlow id="Flow_Timeout" sourceRef="Boundary_Timeout" targetRef="Gateway_Analisar" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Gateway_Analisar" targetRef="Task_AnalisarFalha" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_AnalisarFalha" targetRef="End_Falhou" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="Diagram_SincronizacaoHotglue">
+    <bpmndi:BPMNPlane id="Plane_SincronizacaoHotglue" bpmnElement="sincronizacao-hotglue">
+      <bpmndi:BPMNShape id="Start_Sincronizar_di" bpmnElement="Start_Sincronizar"><dc:Bounds x="152" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_DispararJob_di" bpmnElement="Task_DispararJob"><dc:Bounds x="240" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AguardarJob_di" bpmnElement="Task_AguardarJob"><dc:Bounds x="400" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Timeout_di" bpmnElement="Boundary_Timeout"><dc:Bounds x="432" y="222" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Sucesso_di" bpmnElement="Gateway_Sucesso" isMarkerVisible="true"><dc:Bounds x="565" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Sincronizado_di" bpmnElement="End_Sincronizado"><dc:Bounds x="682" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Analisar_di" bpmnElement="Gateway_Analisar" isMarkerVisible="true"><dc:Bounds x="565" y="315" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AnalisarFalha_di" bpmnElement="Task_AnalisarFalha"><dc:Bounds x="650" y="300" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Falhou_di" bpmnElement="End_Falhou"><dc:Bounds x="802" y="322" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1"><di:waypoint x="188" y="200" /><di:waypoint x="240" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2"><di:waypoint x="340" y="200" /><di:waypoint x="400" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3"><di:waypoint x="500" y="200" /><di:waypoint x="565" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Ok_di" bpmnElement="Flow_Ok"><di:waypoint x="615" y="200" /><di:waypoint x="682" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Falhou_di" bpmnElement="Flow_Falhou"><di:waypoint x="590" y="225" /><di:waypoint x="590" y="315" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Timeout_di" bpmnElement="Flow_Timeout"><di:waypoint x="450" y="258" /><di:waypoint x="450" y="340" /><di:waypoint x="565" y="340" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4"><di:waypoint x="615" y="340" /><di:waypoint x="650" y="340" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5"><di:waypoint x="750" y="340" /><di:waypoint x="802" y="340" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
